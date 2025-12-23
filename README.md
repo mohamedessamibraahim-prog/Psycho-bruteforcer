@@ -4,7 +4,7 @@ Built a multi-threaded, memory-efficient Python tool for testing login mechanism
 # Example Of Usage
 A basic Usage
 ```
-python3 psycho_brute.py --url https://example.com/login.php \
+python3 Psycho.py --url https://example.com/login.php \
     --user-field username
     --user-field password 
     --wordlist-target pass \
