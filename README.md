@@ -13,3 +13,10 @@ python3 Psycho.py --url https://example.com/login.php \
     --threads 10 \
     --delay 0.5
 ```
+# How To Install It
+```
+git clone https://github.com/mohamedessamibraahim-prog/Psycho-bruteforcer.git;
+cd Psycho-bruteforcer;
+python3 Psycho.py
+```
+THANKS.
