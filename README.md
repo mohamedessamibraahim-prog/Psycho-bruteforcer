@@ -21,6 +21,6 @@ cd Psycho-bruteforcer;
 python3 Psycho.py
 ```
 
-Note: code is updated to improve the threads option.
+⚠️Note: code is updated to improve the threads option.
 
 THANKS.
