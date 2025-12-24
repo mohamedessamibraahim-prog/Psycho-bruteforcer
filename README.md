@@ -6,8 +6,8 @@ Built a multi-threaded, memory-efficient Python tool for testing login mechanism
 A basic Usage
 ```
 python3 Psycho.py --url https://example.com/login.php \
-    --user-field username
-    --user-field password 
+    --user-field username \
+    --pass-field password \
     --wordlist-target pass \
     --user admin \
     --passwords passwords.txt \
