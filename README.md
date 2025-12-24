@@ -1,6 +1,5 @@
 ![unnamed](https://github.com/user-attachments/assets/da1413a3-ff0a-482c-8b8e-000625890da3)
-# Psycho-brute
-forcer
+# Psycho-bruteforcer
 Built a multi-threaded, memory-efficient Python tool for testing login mechanisms in authorized lab environments. The project focuses on understanding authentication workflows, CSRF token handling, session management, rate-limiting defenses, and scalable request design using large wordlists.
 
 # Example Of Usage
