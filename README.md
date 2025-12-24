@@ -20,5 +20,7 @@ git clone https://github.com/mohamedessamibraahim-prog/Psycho-bruteforcer.git;
 cd Psycho-bruteforcer;
 python3 Psycho.py
 ```
+
 Note: code is updated to improve the threads option.
+
 THANKS.
