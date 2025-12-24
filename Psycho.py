@@ -11,6 +11,7 @@ from urllib.parse import parse_qs
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import math
+import pyfiglet
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ---------- Color codes (unchanged) ----------
@@ -503,6 +504,8 @@ def brute_psycho_threaded(config):
 
 # ---------- CLI (unchanged) ----------
 def main():
+    banner = pyfiglet.figlet_format("Psycho Tool", font="slant")
+    print(banner)
     parser = argparse.ArgumentParser(description="Psycho Tool Memory-efficient brute forcer - handles huge wordlists")
     parser.add_argument('--url', required=True)
     parser.add_argument('--user-field', default='username')
