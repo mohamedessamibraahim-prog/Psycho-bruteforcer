@@ -504,7 +504,8 @@ def brute_psycho_threaded(config):
 
 # ---------- CLI (unchanged) ----------
 def main():
-    banner = pyfiglet.figlet_format("Psycho Tool", font="slant")
+    banners_text = ['Psycho Tool', 'Psycho Brute Forcer', 'Psycho BF']
+    banner = pyfiglet.figlet_format(random.choice(banners_text), font="slant")
     print(banner)
     parser = argparse.ArgumentParser(description="Psycho Tool Memory-efficient brute forcer - handles huge wordlists")
     parser.add_argument('--url', required=True)
@@ -610,4 +611,3 @@ def parse_error_strings(file_path):
 
 if __name__ == "__main__":
     main()
-
