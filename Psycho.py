@@ -14,7 +14,7 @@ import math
 import pyfiglet
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# ---------- Color codes (unchanged) ----------
+# ---------- Color codes ----------
 class Colors:
     GREEN = '\033[92m'
     BLUE = '\033[94m'
@@ -36,7 +36,7 @@ def cyan(text): return f"{Colors.CYAN}{text}{Colors.END}"
 def bold(text): return f"{Colors.BOLD}{text}{Colors.END}"
 def underline(text): return f"{Colors.UNDERLINE}{text}{Colors.END}"
 
-# ---------- Global success storage (unchanged) ----------
+# ---------- Global success storage ----------
 class SuccessStorage:
     def __init__(self):
         self.credentials = []
@@ -148,7 +148,7 @@ def check_failed_response(response_text, failed_regex_list, verbose=False):
         except re.error: continue
     return False
 
-# ---------- User-Agent handling (unchanged) ----------
+# ---------- User-Agent handling ----------
 def load_user_agents(ua_file=None):
     builtin = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
@@ -610,3 +610,4 @@ def parse_error_strings(file_path):
 
 if __name__ == "__main__":
     main()
+
