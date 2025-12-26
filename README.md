@@ -11,7 +11,6 @@ python3 Psycho.py --url https://example.com/login.php \
     --wordlist-target pass \
     --user admin \
     --passwords passwords.txt \
-    --threads 10 \
     --delay 0.5
 ```
 # How To Install It
