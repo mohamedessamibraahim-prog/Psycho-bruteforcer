@@ -12,9 +12,8 @@ Built a multi-threaded, memory-efficient Python tool for testing login mechanism
 
 5.⚡ Multi-Threaded Engine.
 
-6.🧠 Memory-Efficient Wordlist Processing.
+6.🧠 Memory-Efficient Wordlist Processing Handles large files without loading them fully into RAM.
 
-Handles large files without loading them fully into RAM
 # Example Of Usage
 A basic Usage
 ```
